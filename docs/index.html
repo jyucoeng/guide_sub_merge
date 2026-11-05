@@ -494,12 +494,11 @@ singbox-tools（SSH 命令生成器）
       <article class="step" id="step-3">
         <div class="step-no">3</div>
         <div class="step-body">
-          <div class="step-head"><h3>找到 ⑦ 节点订阅 与 ⑧ 节点上报</h3></div>
-<p>这两栏里只有 ⑧ 是要动的，⑦ 保持默认就行：</p>
+          <div class="step-head"><h3>找到 ⑧ 节点上报</h3></div>
+<p>这一栏是唯一要动的地方：</p>
           <ul>
-            <li><b>⑦ 节点订阅</b>：这一栏跟 sub-merge 无关 —— 它是脚本给本机生成的临时订阅地址 <code class="inline">https://域名/sub/UUID</code>，重启换域名就失效。<b>保持默认「关闭」</b>，固定地址交给 sub-merge；</li>
             <li><b>⑧ 节点上报</b>：下拉选「开启（自动推送）」，服务端地址填你的 sub-merge 域名（如 <code class="inline">https://sub.example.com</code>），上报凭证填 <code class="inline">REPORT_TOKEN</code>（<b>不是</b> <code class="inline">SUB_TOKEN</code>，两个口令各管一头）；</li>
-            <li><b>机器名</b>：留空就自动跟随 ④ 的 <code class="inline">name</code>，多台机器千万别填成一样的，否则上报会互相覆盖。</li>
+            <li><b>机器名</b>：留空就自动跟随 ④ 的 <code class="inline">name</code>，多台机器千万别填成一样的，否则上报会互相覆盖。名字里带上国家和地区的比较推荐，比如 <code class="inline">美国圣何塞-oracle</code>、<code class="inline">HK-1</code>、<code class="inline">JP-softbank</code> 这类。</li>
           </ul>
           <p>⑧ 要填的域名和上报凭证，都得先有一个 sub-merge，所以<strong>先把它部署起来</strong>——这正是第二部分要做的事。</p>
           <figure class="fig" style="--figw:700px">
