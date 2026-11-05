@@ -603,7 +603,7 @@ singbox-tools（SSH 命令生成器）
             <li><code class="inline">REPORT_TOKEN</code>：服务器上报用的口令，只给上报脚本用。<br>示例：<code class="inline">b7d4e2f1-8a3c-4f59-b1d0-6c92ae5713ff</code></li>
           </ul>
           <p><b>建议三个口令直接用 UUID</b>：36 位、只有字母数字和连字符，粘贴不会因为空格或特殊字符出错，也不用担心长度不够。打开 <a href="https://1024tools.com/uuid" target="_blank" rel="noopener">https://1024tools.com/uuid</a> 连点三次，拿到的三串分别填进 <code class="inline">SUB_TOKEN</code>、<code class="inline">ADMIN_PASSWORD</code>、<code class="inline">REPORT_TOKEN</code> 就行。</p>
-          <p>三个口令互相独立，别用同一串；上面示例里的值只是示范，请换成你自己生成的。<code class="inline">SUB_TOKEN</code> 会出现在订阅链接里，泄露了也不会连带 <code class="inline">REPORT_TOKEN</code>。</p>
+          <p>三个口令互相独立，别用同一串；上面示例里的值只是示范，请换成你自己生成的。</p>
           <figure class="fig" style="--figw:1178px">
             <a class="zoom" href="./img/my-cf-vars.webp"><img src="./img/my-cf-vars.webp" width="1178" height="470" loading="lazy" decoding="async" alt="变量和机密面板里四条文本变量：ADMIN_PASSWORD、REPORT_TOKEN、SUB_TOKEN、UI_PATH"></a>
             <figcaption>四条都是 Type=文本：三个口令 +（可选）<code class="inline">UI_PATH</code>，改过 <code class="inline">UI_PATH</code> 登录地址就变成 <code class="inline">/admin</code> 这种；图中口令已打码。</figcaption>
