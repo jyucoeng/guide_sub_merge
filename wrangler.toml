@@ -1,0 +1,11 @@
+name = "guide"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+# 只需要 Workers 运行时的 Response / atob，不需要 nodejs_compat
+workers_dev = true
+
+# 自定义域名（可选，绑定前先在 Cloudflare 里接好该域名的 DNS）
+# routes = [
+#   { pattern = "guide.example.com", custom_domain = true }
+# ]

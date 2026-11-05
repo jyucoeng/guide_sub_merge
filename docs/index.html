@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>订阅设置教程 · singbox-tools + sub-merge 固定订阅</title>
+<meta name="description" content="一步步把 singbox-tools 的⑦节点订阅⑧节点上报和 sub-merge 配好：在 Cloudflare 部署 Worker、建 D1 库、绑定 DB 与三个口令、设置域名、回填生成器，最后在服务器上跑一条命令，客户端从此只认一个固定订阅地址。">
+
+<meta name="theme-color" content="#0b1020" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f6f8fc" media="(prefers-color-scheme: light)">
+<meta property="og:type" content="article">
+<meta property="og:title" content="订阅设置教程 · singbox-tools + sub-merge">
+<meta property="og:description" content="从 Cloudflare Worker + D1 部署 sub-merge，到生成器回填与客户端导入，一次配好永久复用的固定订阅地址。">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=&#39;http://www.w3.org/2000/svg&#39; viewBox=&#39;0 0 64 64&#39;%3E%3Crect width=&#39;64&#39; height=&#39;64&#39; rx=&#39;14&#39; fill=&#39;%234f7cff&#39;/%3E%3Ctext x=&#39;32&#39; y=&#39;45&#39; font-size=&#39;38&#39; text-anchor=&#39;middle&#39; fill=&#39;white&#39; font-family=&#39;sans-serif&#39;%3E%E2%9A%99%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0b1020;
+    --bg-soft: #0e1530;
+    --panel: #121831;
+    --panel-2: #161d3a;
+    --ink: #e9edf7;
+    --ink-soft: #b7c1d9;
+    --sub: #8f9cba;
+    --line: #263255;
+    --line-soft: #1e2947;
+    --acc: #4f7cff;
+    --acc-2: #7aa2ff;
+    --acc-soft: rgba(79, 124, 255, .14);
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --err: #ef4444;
+    --code-bg: #080d1c;
+    --code-ink: #d6e0f7;
+    --shadow: 0 18px 40px -24px rgba(0, 0, 0, .85);
+    --header-bg: rgba(11, 16, 32, .82);
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f8fc;
+      --bg-soft: #eef2fa;
+      --panel: #ffffff;
+      --panel-2: #f7f9fe;
+      --ink: #131a2b;
+      --ink-soft: #33415c;
+      --sub: #5b6a86;
+      --line: #dde4f1;
+      --line-soft: #e8edf7;
+      --acc: #3b6cf6;
+      --acc-2: #2b56d6;
+      --acc-soft: rgba(59, 108, 246, .10);
+      --ok: #15803d;
+      --warn: #b45309;
+      --err: #b91c1c;
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f5;
+      --shadow: 0 16px 32px -26px rgba(20, 35, 80, .5);
+      --header-bg: rgba(246, 248, 252, .85);
+    }
+  }
+  html[data-theme="dark"] {
+    --bg: #0b1020; --bg-soft: #0e1530; --panel: #121831; --panel-2: #161d3a;
+    --ink: #e9edf7; --ink-soft: #b7c1d9; --sub: #8f9cba;
+    --line: #263255; --line-soft: #1e2947;
+    --acc: #4f7cff; --acc-2: #7aa2ff; --acc-soft: rgba(79, 124, 255, .14);
+    --ok: #22c55e; --warn: #f59e0b; --err: #ef4444;
+    --code-bg: #080d1c; --code-ink: #d6e0f7;
+    --shadow: 0 18px 40px -24px rgba(0, 0, 0, .85);
+    --header-bg: rgba(11, 16, 32, .82);
+  }
+  html[data-theme="light"] {
+    --bg: #f6f8fc; --bg-soft: #eef2fa; --panel: #ffffff; --panel-2: #f7f9fe;
+    --ink: #131a2b; --ink-soft: #33415c; --sub: #5b6a86;
+    --line: #dde4f1; --line-soft: #e8edf7;
+    --acc: #3b6cf6; --acc-2: #2b56d6; --acc-soft: rgba(59, 108, 246, .10);
+    --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+    --code-bg: #0f172a; --code-ink: #e2e8f5;
+    --shadow: 0 16px 32px -26px rgba(20, 35, 80, .5);
+    --header-bg: rgba(246, 248, 252, .85);
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.72 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: var(--acc); text-decoration: none; }
+  a:hover { color: var(--acc-2); text-decoration: underline; text-underline-offset: 3px; }
+  :focus-visible { outline: 2px solid var(--acc); outline-offset: 3px; border-radius: 6px; }
+  img { max-width: 100%; height: auto; }
+
+  /* ---------- header ---------- */
+  .progress { position: fixed; inset: 0 0 auto 0; height: 3px; z-index: 60; background: transparent; }
+  .progress span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--acc), #a86bff); transition: width .08s linear; }
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; gap: 14px;
+    height: 58px; padding: 0 20px;
+    background: var(--header-bg);
+    backdrop-filter: saturate(160%) blur(12px);
+    -webkit-backdrop-filter: saturate(160%) blur(12px);
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--ink); font-size: 15px; white-space: nowrap; }
+  .brand:hover { text-decoration: none; color: var(--ink); }
+  .brand .logo {
+    width: 28px; height: 28px; border-radius: 8px; flex: none;
+    background: linear-gradient(140deg, var(--acc), #8f5cff);
+    display: grid; place-items: center; color: #fff; font-size: 15px;
+  }
+  .brand small { font-weight: 500; color: var(--sub); font-size: 12.5px; }
+  .topbar .spacer { flex: 1; }
+  .topbar .links { display: flex; align-items: center; gap: 4px; }
+  .topbar .links a { color: var(--ink-soft); font-size: 13.5px; padding: 7px 10px; border-radius: 8px; }
+  .topbar .links a:hover { background: var(--acc-soft); color: var(--acc); text-decoration: none; }
+  .icon-btn {
+    width: 36px; height: 36px; display: grid; place-items: center;
+    border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); color: var(--ink); cursor: pointer; font-size: 16px; line-height: 1;
+    transition: transform .2s, border-color .2s;
+  }
+  .icon-btn:hover { transform: rotate(18deg); border-color: var(--acc); }
+  @media (max-width: 640px) {
+    .topbar .links a.hide-sm { display: none; }
+    .brand small { display: none; }
+  }
+
+  /* ---------- layout ---------- */
+  .layout {
+    max-width: 1240px; margin: 0 auto; padding: 34px 22px 72px;
+    display: grid; grid-template-columns: 228px minmax(0, 1fr); gap: 46px;
+    align-items: start;
+  }
+  .toc { position: sticky; top: 82px; font-size: 13.5px; }
+  .toc h2 {
+    margin: 0 0 12px; font-size: 11.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--sub); font-weight: 700;
+  }
+  .toc ol { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--line); }
+  .toc li a {
+    display: block; padding: 7px 0 7px 14px; margin-left: -1px;
+    border-left: 2px solid transparent; color: var(--ink-soft); line-height: 1.45;
+  }
+  .toc li a:hover { color: var(--acc); text-decoration: none; }
+  .toc li a.active { color: var(--acc); border-left-color: var(--acc); font-weight: 600; background: linear-gradient(90deg, var(--acc-soft), transparent 70%); }
+  .toc .toc-extra { margin-top: 18px; padding-left: 14px; color: var(--sub); font-size: 12.5px; line-height: 1.9; }
+
+  main { min-width: 0; }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 4px 0 10px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-size: 12.5px; font-weight: 600; letter-spacing: .04em;
+    color: var(--acc); background: var(--acc-soft);
+    border: 1px solid rgba(79, 124, 255, .28); border-radius: 999px; padding: 4px 12px;
+  }
+  .hero h1 {
+    font-size: clamp(28px, 4.4vw, 42px); line-height: 1.22;
+    margin: 16px 0 12px; letter-spacing: -.015em;
+  }
+  .hero h1 .grad { background: linear-gradient(96deg, var(--acc), #a86bff 70%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero .lede { font-size: 17px; color: var(--ink-soft); margin: 0 0 22px; max-width: 62ch; }
+  .chips { display: flex; flex-wrap: wrap; gap: 9px; margin: 0 0 6px; padding: 0; list-style: none; }
+  .chips li {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 13px; color: var(--ink-soft);
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 13px;
+  }
+  .chips li b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- headings ---------- */
+  .part { margin-top: 54px; scroll-margin-top: 76px; }
+  .part > h2 {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    font-size: 24px; line-height: 1.3; margin: 0 0 8px; letter-spacing: -.01em;
+  }
+  .part > h2 .part-no {
+    font-size: 12px; font-weight: 700; letter-spacing: .1em; color: var(--acc);
+    background: var(--acc-soft); border-radius: 6px; padding: 3px 8px; transform: translateY(-2px);
+  }
+  .part > .part-sub { color: var(--sub); margin: 0 0 26px; font-size: 14.5px; }
+
+  h3 { font-size: 17px; margin: 0; line-height: 1.45; letter-spacing: -.005em; }
+  p { margin: 0 0 14px; }
+  .lead-p { color: var(--ink-soft); }
+
+  /* ---------- steps ---------- */
+  .step {
+    position: relative;
+    display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 0 16px;
+    padding: 18px 0 6px; scroll-margin-top: 76px;
+  }
+  .step + .step { border-top: 1px dashed var(--line); margin-top: 14px; }
+  .step-no {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums;
+    color: #fff; background: linear-gradient(140deg, var(--acc), #7a5cff);
+    box-shadow: 0 6px 16px -8px rgba(79, 124, 255, .9);
+  }
+  .step-body { min-width: 0; padding-top: 3px; }
+  .step-body > p:first-child { margin-top: 0; }
+  .step-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+  /* ---------- figures ---------- */
+  .fig { margin: 16px 0 6px; }
+  .fig .zoom {
+    display: block; margin: 0 auto; max-width: min(100%, var(--figw, 900px));
+    border: 1px solid var(--line); border-radius: 12px; overflow: hidden;
+    background: var(--panel-2); cursor: zoom-in; line-height: 0;
+    box-shadow: var(--shadow); transition: border-color .2s, transform .2s;
+  }
+  .fig .zoom:hover { border-color: var(--acc); transform: translateY(-1px); }
+  .fig img { display: block; width: 100%; height: auto; }
+  .fig figcaption {
+    max-width: min(100%, var(--figw, 900px)); margin: 8px auto 0;
+    font-size: 12.8px; line-height: 1.6; color: var(--sub);
+    padding-left: 10px; border-left: 2px solid var(--line);
+  }
+
+  /* ---------- code ---------- */
+  .code-wrap { position: relative; margin: 16px 0 18px; }
+  pre {
+    margin: 0; padding: 16px 18px; overflow-x: auto;
+    background: var(--code-bg); color: var(--code-ink);
+    border: 1px solid #1d2740; border-radius: 12px;
+    font: 13.4px/1.7 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", "Microsoft YaHei", monospace;
+    tab-size: 2;
+  }
+  pre code { font: inherit; color: inherit; background: none; }
+  .copy-btn {
+    position: absolute; top: 9px; right: 9px;
+    font-size: 12px; font-family: inherit;
+    color: #c8d5f2; background: rgba(255, 255, 255, .08);
+    border: 1px solid rgba(255, 255, 255, .16); border-radius: 7px;
+    padding: 4px 10px; cursor: pointer; transition: background .15s, color .15s;
+  }
+  .copy-btn:hover { background: rgba(255, 255, 255, .18); color: #fff; }
+  .copy-btn.done { background: rgba(34, 197, 94, .9); border-color: transparent; color: #04210f; }
+  code.inline {
+    font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: var(--acc-soft); color: var(--acc-2);
+    border: 1px solid rgba(79, 124, 255, .22);
+    padding: 1px 6px; border-radius: 6px;
+    overflow-wrap: break-word; /* 长 URL 允许断行，否则窄屏会横向溢出 */
+  }
+  html[data-theme="light"] code.inline { color: var(--acc); }
+  /* 标题里的行内代码：去掉药丸底，避免像按钮 */
+  h1 code.inline, h2 code.inline, h3 code.inline {
+    background: none; border: 0; padding: 0; border-radius: 0;
+    font-size: .82em; color: var(--acc); letter-spacing: .01em;
+  }
+
+  /* ---------- callouts ---------- */
+  .note, .warn, .tip {
+    display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 12px;
+    margin: 18px 0; padding: 14px 16px;
+    border-radius: 12px; font-size: 14.5px; line-height: 1.7;
+    border: 1px solid var(--line); background: var(--panel);
+  }
+  .note { border-left: 3px solid var(--acc); background: var(--acc-soft); }
+  .warn { border-left: 3px solid var(--warn); background: rgba(245, 158, 11, .10); }
+  .tip  { border-left: 3px solid var(--ok);  background: rgba(34, 197, 94, .09); }
+  .note .ico, .warn .ico, .tip .ico { font-size: 15px; line-height: 1.5; }
+  .note p:last-child, .warn p:last-child, .tip p:last-child, .note ul:last-child, .warn ul:last-child { margin-bottom: 0; }
+  .note strong, .warn strong, .tip strong { color: var(--ink); }
+
+  /* ---------- misc blocks ---------- */
+  ul.checks { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+  ul.checks li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; font-size: 14.8px; color: var(--ink-soft); }
+  ul.checks li .tick { color: var(--ok); font-weight: 700; }
+  ul.checks li b { color: var(--ink); }
+
+  .diagram {
+    margin: 18px 0 6px; padding: 18px; overflow-x: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    font: 12.6px/1.75 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: var(--ink-soft); white-space: pre;
+  }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 12px; margin: 18px 0 4px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 16px; font-size: 14px; color: var(--ink-soft); line-height: 1.65;
+  }
+  .card b { display: block; color: var(--ink); font-size: 14.5px; margin-bottom: 4px; }
+
+  /* ---------- faq ---------- */
+  details.faq {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 0 16px; margin: 10px 0; scroll-margin-top: 76px;
+  }
+  details.faq[open] { border-color: var(--acc); }
+  details.faq summary {
+    cursor: pointer; padding: 13px 0; font-weight: 600; font-size: 15px;
+    list-style: none; display: flex; align-items: center; gap: 10px;
+  }
+  details.faq summary::-webkit-details-marker { display: none; }
+  details.faq summary::before {
+    content: "＋"; color: var(--acc); font-weight: 700; font-size: 14px;
+    width: 16px; flex: none; transition: transform .2s;
+  }
+  details.faq[open] summary::before { content: "－"; }
+  details.faq .faq-body { padding: 0 0 14px 26px; font-size: 14.6px; color: var(--ink-soft); border-top: 1px dashed var(--line); padding-top: 12px; }
+  details.faq .faq-body p:last-child, details.faq .faq-body pre:last-child { margin-bottom: 0; }
+
+  /* ---------- footer ---------- */
+  .foot {
+    margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--line);
+    font-size: 13px; color: var(--sub); display: flex; flex-wrap: wrap; gap: 6px 18px;
+    align-items: center; justify-content: space-between;
+  }
+  .foot a { color: var(--ink-soft); }
+
+  /* ---------- lightbox ---------- */
+  .lightbox {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    background: rgba(4, 8, 20, .93);
+    padding: 3vmin; align-items: center; justify-content: center;
+  }
+  .lightbox.on { display: flex; }
+  .lightbox img {
+    max-width: 100%; max-height: 94vh; border-radius: 8px;
+    box-shadow: 0 30px 80px -20px #000; image-rendering: auto;
+  }
+  .lightbox .close {
+    position: absolute; top: 14px; right: 16px; width: 40px; height: 40px;
+    border-radius: 50%; border: 1px solid rgba(255, 255, 255, .3);
+    background: rgba(255, 255, 255, .1); color: #fff; font-size: 20px;
+    cursor: pointer; display: grid; place-items: center;
+  }
+  .lightbox .hint { position: absolute; bottom: 14px; left: 0; right: 0; text-align: center; color: rgba(255, 255, 255, .55); font-size: 12.5px; }
+
+  /* ---------- print ---------- */
+  @media print {
+    .topbar, .toc, .progress, .copy-btn, .lightbox { display: none !important; }
+    .layout { display: block; max-width: none; padding: 0; }
+    body { background: #fff; color: #111; font-size: 11.5pt; }
+    .fig, .step, .card, details.faq { break-inside: avoid; }
+    .part { break-before: auto; }
+    a { color: #111; text-decoration: underline; }
+    .fig .zoom { border: 1px solid #ccc; box-shadow: none; }
+  }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 1080px) {
+    .layout { grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 22px; }
+    .toc { position: static; order: -1; margin-bottom: 26px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+    .toc h2 { margin-bottom: 8px; }
+    .toc ol { display: flex; flex-wrap: wrap; gap: 6px 4px; border: 0; }
+    .toc li a { border-left: 0; padding: 5px 10px; border-radius: 8px; background: var(--panel-2); font-size: 13px; }
+    .toc li a.active { background: var(--acc-soft); }
+    .toc .toc-extra { display: none; }
+  }
+  @media (max-width: 620px) {
+    .layout { padding: 18px 15px 56px; }
+    .step { grid-template-columns: 30px minmax(0, 1fr); gap: 0 12px; }
+    .step-no { width: 28px; height: 28px; font-size: 13px; }
+    .part { margin-top: 42px; }
+    .part > h2 { font-size: 21px; }
+    .hero .lede { font-size: 15.5px; }
+    pre { font-size: 12.4px; padding: 13px 14px; }
+    .foot { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<div class="progress"><span id="progress-bar" style="width: 90.3853%;"></span></div>
+
+<header class="topbar">
+  <a class="brand" href="#top">
+    <span class="logo" aria-hidden="true">⚙</span>
+    <span>singbox-tools <small>订阅设置教程</small></span>
+  </a>
+  <span class="spacer"></span>
+  <nav class="links" aria-label="相关链接">
+    <a href="https://singbox.dingdang.de5.net/" target="_blank" rel="noopener" class="hide-sm">生成器首页</a>
+    <a href="https://github.com/jyucoeng/singbox-tools" target="_blank" rel="noopener" class="hide-sm">脚本仓库</a>
+    <a href="#faq">常见问题</a>
+  </nav>
+  <button class="icon-btn" id="theme-btn" type="button" title="切换深色 / 浅色" aria-label="切换深色 / 浅色">🌙</button>
+</header>
+
+<div class="layout">
+  <aside class="toc" aria-label="本页目录">
+    <h2>本页目录</h2>
+    <ol id="toc-list">
+      <li><a href="#before">开始之前</a></li>
+      <li><a href="#part-1">一、生成器里的订阅设置</a></li>
+      <li><a href="#part-2">二、部署 sub-merge</a></li>
+      <li><a href="#part-3">三、绑定 D1 与口令</a></li>
+      <li><a href="#part-4">四、绑定域名</a></li>
+      <li><a href="#part-5">五、回填域名与口令</a></li>
+      <li><a href="#part-6">六、执行安装命令</a></li>
+      <li><a href="#part-7">七、客户端导入订阅</a></li>
+      <li><a href="#faq">常见问题</a></li>
+    </ol>
+    <div class="toc-extra">
+      全程约 15 分钟<br>无需写代码，只需复制粘贴
+    </div>
+  </aside>
+
+  <main>
+    <section class="hero" id="top">
+      <span class="eyebrow">Singbox-Tools × sub-merge</span>
+      <h1>订阅设置教程<br><span class="grad">把订阅地址固定下来</span></h1>
+      <p class="lede">
+        一键命令生成器（singbox-tools）能直接给你一条临时订阅地址，但 cloudflared 隧道每次重启都会换域名，客户端就要重新导入。本教程用 <b>sub-merge</b> 把节点汇总到 Cloudflare Worker + D1，客户端从此只认一个固定地址。
+      </p>
+      <ul class="chips">
+        <li>⏱ 约 <b>15 分钟</b></li>
+        <li>☁️ <b>Cloudflare</b> 免费账号即可</li>
+        <li>🖥 一台能 SSH 的 <b>NAT 机 / VPS</b></li>
+        <li>💸 <b>零成本</b>，额度足够日常使用</li>
+      </ul>
+    </section>
+
+    <!-- ================= 开始之前 ================= -->
+    <section class="part" id="before">
+      <h2><span class="part-no">准备</span>开始之前</h2>
+      <p class="part-sub">先把东西备齐，后面一路点下去就不会卡住。</p>
+
+      <ul class="checks">
+        <li><span class="tick">✓</span><span>一个 <b>Cloudflare 账号</b>，登录 <a href="https://dash.cloudflare.com/" target="_blank" rel="noopener">dash.cloudflare.com</a>，免费版即可。</span></li>
+        <li><span class="tick">✓</span><span>一台已经装好 sbm 的 <b>服务器</b>（NAT 机或 VPS 都行），能用 SSH 登进去。</span></li>
+        <li><span class="tick">✓</span><span>可选：一个<b>已接入 Cloudflare 的域名</b>。不绑也能用，Worker 自带的 <code class="inline">*.workers.dev</code> 一样能跑。</span></li>
+        <li><span class="tick">✓</span><span>手机上装好<b>客户端</b>（v2rayN、Clash、Mihomo、sing-box 都可以），最后一步要用。</span></li>
+      </ul>
+
+      <div class="note">
+        <span class="ico" aria-hidden="true">💡</span>
+        <div>
+          <p><strong>几个名字必须一字不差</strong>：D1 绑定的变量名是 <code class="inline">DB</code>，口令是 <code class="inline">SUB_TOKEN</code>、<code class="inline">ADMIN_PASSWORD</code>、<code class="inline">REPORT_TOKEN</code>，全都区分大小写。变量名写成 <code class="inline">DB_NAME</code> 之类会直接报 <code class="inline">env.DB is undefined</code>。</p>
+        </div>
+      </div>
+
+      <p style="margin-top:26px">整个流程的数据流向是这样的：</p>
+      <div class="diagram" role="img" aria-label="架构示意图：服务器把节点上报给 Cloudflare Worker，客户端从 Worker 拉取固定订阅地址">
+singbox-tools（SSH 命令生成器）
+        │  ① 生成安装命令（带 REPORT_BASE / REPORT_TOKEN）
+        ▼
+   你的服务器  ──② 上报节点（POST /api/v1/report/:机器名）──▶  Cloudflare Worker
+        ▲                                                          │  D1: sub-merge-db
+        │                                                          ▼
+   客户端  ◀─────────── ③ GET /sub/all/&lt;SUB_TOKEN&gt; ────────────┘</div>
+
+      <div class="cards">
+        <div class="card"><b>① 一次性配置</b>Worker 和 D1 只需要建一次，之后一直复用。</div>
+        <div class="card"><b>② 地址永不变</b>机器重装、重启、换 IP 都不影响客户端订阅。</div>
+        <div class="card"><b>③ 多机合并</b>多台服务器上报到同一个 Worker，一条订阅带走全部节点。</div>
+      </div>
+    </section>
+
+        <!-- ================= 第一部分 ================= -->
+    <section class="part" id="part-1">
+      <h2><span class="part-no">第一部分</span>生成器里的订阅设置</h2>
+      <p class="part-sub">生成器上跟固定订阅有关的是两栏：⑦ 节点订阅是脚本给本机生成的临时订阅（本教程用不上，保持关闭即可），⑧ 节点上报才是把节点推给 sub-merge 的开关。</p>
+
+      <article class="step" id="step-1">
+        <div class="step-no">1</div>
+        <div class="step-body">
+          <div class="step-head"><h3>打开生成器首页</h3></div>
+<p>浏览器访问 <a href="https://singbox.dingdang.de5.net/" target="_blank" rel="noopener">https://singbox.dingdang.de5.net/</a>，默认界面长这样：左边是直连协议与端口、Argo、WS-CDN，右边是全局配置与 Socks5。</p>
+          <figure class="fig" style="--figw:1440px">
+            <a class="zoom" href="./img/my-gen-home.webp"><img src="./img/my-gen-home.webp" width="1440" height="1000" loading="lazy" decoding="async" alt="Singbox-Tools 生成器首页：左侧直连协议与端口、右侧全局配置"></a>
+            <figcaption>你自己的生成器首页（https://singbox.dingdang.de5.net/，图中参数为示例）。本教程只用到下面的 ⑧ 节点上报一栏（⑦ 保持关闭）。</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="step" id="step-2">
+        <div class="step-no">2</div>
+        <div class="step-body">
+          <div class="step-head"><h3>看看全部启用后的样子</h3></div>
+<p>四项直连端口都填上、Argo 与 WS-CDN 三个协议全选、Socks5 打开、节点上报开启，界面会展开成下面这样，最下方就是生成好的 SSH 一键命令。</p>
+          <figure class="fig" style="--figw:1440px">
+            <a class="zoom" href="./img/my-gen-all.webp"><img src="./img/my-gen-all.webp" width="1440" height="3898" loading="lazy" decoding="async" alt="全部启用后的生成器界面，最下方是生成的 SSH 一键命令"></a>
+            <figcaption>全部启用后的完整界面。滚到最底部能看到 <b>生成的 SSH 一键命令</b> 区块。</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="step" id="step-3">
+        <div class="step-no">3</div>
+        <div class="step-body">
+          <div class="step-head"><h3>找到 ⑦ 节点订阅 与 ⑧ 节点上报</h3></div>
+<p>这两栏里只有 ⑧ 是要动的，⑦ 保持默认就行：</p>
+          <ul>
+            <li><b>⑦ 节点订阅</b>：这一栏跟 sub-merge 无关 —— 它是脚本给本机生成的临时订阅地址 <code class="inline">https://域名/sub/UUID</code>，重启换域名就失效。<b>保持默认「关闭」</b>，固定地址交给 sub-merge；</li>
+            <li><b>⑧ 节点上报</b>：下拉选「开启（自动推送）」，服务端地址填你的 sub-merge 域名（如 <code class="inline">https://sub.example.com</code>），上报凭证填 <code class="inline">REPORT_TOKEN</code>（<b>不是</b> <code class="inline">SUB_TOKEN</code>，两个口令各管一头）；</li>
+            <li><b>机器名</b>：留空就自动跟随 ④ 的 <code class="inline">name</code>，多台机器千万别填成一样的，否则上报会互相覆盖。</li>
+          </ul>
+          <p>⑧ 要填的域名和上报凭证，都得先有一个 sub-merge，所以<strong>先把它部署起来</strong>——这正是第二部分要做的事。</p>
+          <figure class="fig" style="--figw:700px">
+            <a class="zoom" href="./img/my-submit.webp"><img src="./img/my-submit.webp" width="700" height="1505" loading="lazy" decoding="async" alt="⑦ 节点订阅 与 ⑧ 节点上报 sub-merge 两栏"></a>
+            <figcaption>⑦ 本机临时订阅，教程里保持关闭；⑧ 打开自动推送后填域名（如 https://sub.example.com，示例数据）与 REPORT_TOKEN。</figcaption>
+          </figure>
+          <div class="tip">
+            <span class="ico" aria-hidden="true">✅</span>
+            <div><p>⑧ 里带红色星号 <b style="color:#e5484d">*</b> 的是必填项：<b>服务端地址</b>（你的 sub-merge 域名）和<b>上报凭证</b>（<code class="inline">REPORT_TOKEN</code>）两个都得填。缺任一项<b>只是跳过上报</b>——节点照样装在本机上、SSH 命令照常输出，只是 sub-merge 那边不会多出节点，装完会有一行 <code class="inline">⚠️ 已开启自动上报，但还没配置上报地址/上报凭证，本次跳过</code> 的提示。想补，再跑一次 <code class="inline">sb report</code> 单独上报即可。</p></div>
+          </div>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- ================= 第二部分 ================= -->
+    <section class="part" id="part-2">
+      <h2><span class="part-no">第二部分</span>把 sub-merge 部署到 Cloudflare</h2>
+      <p class="part-sub">走 Workers 单文件方式：一个文件、一个 D1 库，全程在网页上点，本地不用装任何东西。</p>
+
+      <article class="step" id="step-4">
+        <div class="step-no">4</div>
+        <div class="step-body">
+          <div class="step-head"><h3>建一个 D1 数据库</h3></div>
+<p>Cloudflare 控制台左侧选 <b>Storage &amp; Databases → D1 SQL Database → Create database</b>，名字填 <code class="inline">sub-merge-db</code>。</p>
+          <p>sub-merge 的数据（机器、节点、订阅档案、短链）全部存在 D1 里，<strong>不是 KV</strong>，别建错类型。</p>
+          <figure class="fig" style="--figw:1440px">
+            <a class="zoom" href="./img/my-cf-d1-list.webp"><img src="./img/my-cf-d1-list.webp" width="1440" height="807" loading="lazy" decoding="async" alt="Cloudflare 控制台的 D1 SQLite 数据库列表，右上角是「创建数据库」，列表里已有 sub-merge-db"></a>
+            <figcaption>控制台左侧 <b>存储和数据库 → D1 SQLite 数据库</b>；右上角就是「创建数据库」，建好后列表里能看到 <code class="inline">sub-merge-db</code>。</figcaption>
+          </figure>        </div>
+      </article>
+
+      <article class="step" id="step-5">
+        <div class="step-no">5</div>
+        <div class="step-body">
+          <div class="step-head"><h3>把建表语句跑一遍</h3></div>
+<p>点进刚建好的库 → 顶部 <b>Console</b>，把仓库里 <code class="inline">scripts/schema.sql</code> 的全文粘进输入框，点 <b>Execute</b>。</p>
+          <p>一次会建好 <code class="inline">machines</code> / <code class="inline">reports</code> / <code class="inline">presets</code> / <code class="inline">links</code> / <code class="inline">settings</code> 五张表；语句是幂等的，重复执行也不会报错。</p>
+          <figure class="fig" style="--figw:1440px">
+            <a class="zoom" href="./img/my-cf-d1-tables.webp"><img src="./img/my-cf-d1-tables.webp" width="1440" height="360" loading="lazy" decoding="async" alt="D1 的 Studio 里能看到 machines、reports、presets、links、settings 等表"></a>
+            <figcaption>跑完 schema.sql，在 <b>Studio</b>（或 Console 里 <code class="inline">SELECT name FROM sqlite_master</code>）能看到建好的表。</figcaption>
+          </figure>        </div>
+      </article>
+
+      <article class="step" id="step-6">
+        <div class="step-no">6</div>
+        <div class="step-body">
+          <div class="step-head"><h3>复制单文件代码</h3></div>
+<p>打开 <a href="https://github.com/jyucoeng/sub_merge" target="_blank" rel="noopener">github.com/jyucoeng/sub_merge</a> 根目录的 <code class="inline">worker.single.js</code>，点右上角 <b>Raw</b> 看纯文本，<kbd>Ctrl</kbd>+<kbd>A</kbd> 全选、<kbd>Ctrl</kbd>+<kbd>C</kbd> 复制。</p>
+          <p>这就是全部代码，一个文件约 260 KB，不用 npm、不用构建。</p>
+          <figure class="fig" style="--figw:1440px">
+            <a class="zoom" href="./img/my-cf-gh-raw.webp"><img src="./img/my-cf-gh-raw.webp" width="1440" height="863" loading="lazy" decoding="async" alt="GitHub 仓库根目录里的 worker.single.js 文件页，右上角有 Raw 按钮"></a>
+            <figcaption>仓库根目录的 <code class="inline">worker.single.js</code>，右上角 <b>Raw</b> 就是纯文本，全选复制即可。</figcaption>
+          </figure>        </div>
+      </article>
+
+      <article class="step" id="step-7">
+        <div class="step-no">7</div>
+        <div class="step-body">
+          <div class="step-head"><h3>创建 Worker 并粘贴部署</h3></div>
+<p>控制台 → <b>Workers &amp; Pages → Create → Workers → Hello World</b>，名字填 <code class="inline">sub-merge</code> → <b>Deploy</b>。</p>
+          <p>然后点 <b>Edit code</b> 进在线编辑器：把默认的 Hello World 代码 <kbd>Ctrl</kbd>+<kbd>A</kbd> 全选删掉，粘贴刚复制的代码，右上角点 <b>Deploy</b>。</p>
+          <div class="tip">
+            <span class="ico" aria-hidden="true">⚠️</span>
+            <div><p>260 KB 粘进去编辑器会卡几秒，等代码高亮完再点 Deploy，中途别刷新页面。</p></div>
+          </div>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- ================= 第三部分 ================= -->
+    <section class="part" id="part-3">
+      <h2><span class="part-no">第三部分</span>绑定 D1 与三个口令</h2>
+      <p class="part-sub">这一步漏了就会报 <code class="inline">env.DB is undefined</code> 或 401。</p>
+
+      <article class="step" id="step-8">
+        <div class="step-no">8</div>
+        <div class="step-body">
+          <div class="step-head"><h3>绑定 D1，变量名必须叫 DB</h3></div>
+<p>回到 Worker → <b>Settings → Bindings → Add → D1 database</b>：</p>
+          <ul>
+            <li><b>Variable name</b>：填 <code class="inline">DB</code>（一字不差，代码里取的就是这个名字）；</li>
+            <li><b>Database</b>：选 <code class="inline">sub-merge-db</code>。</li>
+          </ul>
+          <p>填成 DB_NAME、DATABASE 之类都不认，会直接报 <code class="inline">env.DB is undefined</code>。</p>
+          <figure class="fig" style="--figw:1120px">
+            <a class="zoom" href="./img/my-cf-bindings.webp"><img src="./img/my-cf-bindings.webp" width="1120" height="330" loading="lazy" decoding="async" alt="绑定面板：类型 D1 数据库，名称 DB，值 sub-merge-db"></a>
+            <figcaption>绑定面板长这样：类型 <b>D1 数据库</b>、名称 <code class="inline">DB</code>、值 <code class="inline">sub-merge-db</code>。</figcaption>
+          </figure>
+          <p>用 Pages 部署的话，这块在项目的 <b>设置 → 绑定</b> 里，界面和这里一模一样，只是标题写着 Pages Functions。</p>        </div>
+      </article>
+
+      <article class="step" id="step-9">
+        <div class="step-no">9</div>
+        <div class="step-body">
+          <div class="step-head"><h3>加三个变量（口令）</h3></div>
+<p>还在 <b>Settings</b> 里，进 <b>Variables and Secrets → Add</b>，加三条，Type 都选 <b>Text</b>：</p>
+          <ul>
+            <li><code class="inline">SUB_TOKEN</code>：订阅链接里的口令，出现在 <code class="inline">/sub/all/&lt;SUB_TOKEN&gt;</code>。<br>示例：<code class="inline">3f9c1a7e-5b2d-4c8a-9e61-7d0b2ac4f18e</code></li>
+            <li><code class="inline">ADMIN_PASSWORD</code>：WebUI 登录口令，自己记得住就行，不必是 UUID。<br>示例：<code class="inline">YourAdminPass-2026</code></li>
+            <li><code class="inline">REPORT_TOKEN</code>：服务器上报用的口令，只给上报脚本用。<br>示例：<code class="inline">b7d4e2f1-8a3c-4f59-b1d0-6c92ae5713ff</code></li>
+          </ul>
+          <p><b>建议三个口令直接用 UUID</b>：36 位、只有字母数字和连字符，粘贴不会因为空格或特殊字符出错，也不用担心长度不够。打开 <a href="https://1024tools.com/uuid" target="_blank" rel="noopener">https://1024tools.com/uuid</a> 连点三次，拿到的三串分别填进 <code class="inline">SUB_TOKEN</code>、<code class="inline">ADMIN_PASSWORD</code>、<code class="inline">REPORT_TOKEN</code> 就行。</p>
+          <p>三个口令互相独立，别用同一串；上面示例里的值只是示范，请换成你自己生成的。<code class="inline">SUB_TOKEN</code> 会出现在订阅链接里，泄露了也不会连带 <code class="inline">REPORT_TOKEN</code>。</p>
+          <figure class="fig" style="--figw:1178px">
+            <a class="zoom" href="./img/my-cf-vars.webp"><img src="./img/my-cf-vars.webp" width="1178" height="470" loading="lazy" decoding="async" alt="变量和机密面板里四条文本变量：ADMIN_PASSWORD、REPORT_TOKEN、SUB_TOKEN、UI_PATH"></a>
+            <figcaption>四条都是 Type=文本：三个口令 +（可选）<code class="inline">UI_PATH</code>，改过 <code class="inline">UI_PATH</code> 登录地址就变成 <code class="inline">/admin</code> 这种；图中口令已打码。</figcaption>
+          </figure>        </div>
+      </article>
+
+      <article class="step" id="step-10">
+        <div class="step-no">10</div>
+        <div class="step-body">
+          <div class="step-head"><h3>重新部署，然后登录 WebUI</h3></div>
+<p>变量和绑定改完，<strong>必须再点一次 Deploy</strong>——环境变量只对新的部署生效，光加变量刷新页面是没变化的。</p>
+          <p>然后打开 <code class="inline">https://&lt;你的-worker&gt;.workers.dev</code> 后面接<b>你的入口路径</b>：默认是 <code class="inline">/ui</code>；如果你在环境变量里设了 <code class="inline">UI_PATH</code>（例如 <code class="inline">/admin</code>），入口就变成 <code class="inline">/admin</code>，这时候 <code class="inline">/ui</code> 会直接返回 404、页面一片空白，不是坏了。用 <code class="inline">ADMIN_PASSWORD</code> 登录，能看到机器列表就说明 Worker、D1、口令都通了。</p>
+          <figure class="fig" style="--figw:700px">
+            <a class="zoom" href="./img/my-sub-login.webp"><img src="./img/my-sub-login.webp" width="700" height="335" loading="lazy" decoding="async" alt="sub-merge 登录页：只要求输入管理员口令"></a>
+            <figcaption>sub-merge 的入口就一个口令框，输 ADMIN_PASSWORD 即可进入（同一 IP 10 分钟内错 10 次会锁 24 小时）。</figcaption>
+          </figure>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- ================= 第四部分 ================= -->
+    <section class="part" id="part-4">
+      <h2><span class="part-no">第四部分</span>绑定自己的域名（可选）</h2>
+      <p class="part-sub">不绑也能用，直接拿 <code class="inline">xxx.workers.dev</code> 就行；绑了更好记，也方便以后换 Worker。</p>
+
+      <article class="step" id="step-11">
+        <div class="step-no">11</div>
+        <div class="step-body">
+          <div class="step-head"><h3>添加自定义域名</h3></div>
+<p>Worker → <b>Settings → Domains &amp; Routes → Add custom domain</b>，填一个子域名，例如 <code class="inline">sub.example.com</code>。这个域名所在的 zone 必须已经在同一个 Cloudflare 账号下。</p>
+          <figure class="fig" style="--figw:1440px">
+            <a class="zoom" href="./img/my-cf-domains.webp"><img src="./img/my-cf-domains.webp" width="1440" height="863" loading="lazy" decoding="async" alt="自定义域列表：sub.example.com 状态为「活动」，SSL 已启用"></a>
+            <figcaption>加完后状态显示<b>活动</b>、SSL 已启用，才算真的接上了。</figcaption>
+          </figure>        </div>
+      </article>
+
+      <article class="step" id="step-12">
+        <div class="step-no">12</div>
+        <div class="step-body">
+          <div class="step-head"><h3>确认它真的活了</h3></div>
+<p>浏览器打开你的域名：</p>
+          <ul>
+            <li>访问 <code class="inline">/api</code> 能看到一段 JSON，说明 Worker 在跑；</li>
+            <li>访问你的入口路径（默认 <code class="inline">/ui</code>；设过 <code class="inline">UI_PATH</code> 就是它的值，如 <code class="inline">/admin</code>）能正常登录，说明 D1 和口令也通了。</li>
+          </ul>
+          <figure class="fig" style="--figw:1440px">
+            <a class="zoom" href="./img/my-cf-api.webp"><img src="./img/my-cf-api.webp" width="1440" height="150" loading="lazy" decoding="async" alt="浏览器打开 /api 返回的 JSON，storage 是 d1，subscription_base 是自己的域名"></a>
+            <figcaption>打开 <code class="inline">/api</code> 返回这段 JSON，<code class="inline">storage</code> 是 <code class="inline">d1</code>、<code class="inline">subscription_base</code> 是你自己的域名，就说明全通了。</figcaption>
+          </figure>
+          <div class="tip">
+            <span class="ico" aria-hidden="true">⚠️</span>
+            <div><p>改完绑定或变量没重新部署，域名能打开但会一直报 <code class="inline">env.DB is undefined</code> 或 401。</p></div>
+          </div>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- ================= 第五部分 ================= -->
+    <section class="part" id="part-5">
+      <h2><span class="part-no">第五部分</span>把域名和口令填回生成器</h2>
+      <p class="part-sub">回到生成器，把域名和 <code class="inline">REPORT_TOKEN</code> 的值填到 ⑧ 里。</p>
+
+      <article class="step" id="step-13">
+        <div class="step-no">13</div>
+        <div class="step-body">
+          <div class="step-head"><h3>填 ⑧ 上报信息</h3></div>
+<p>回到 <a href="https://singbox.dingdang.de5.net/" target="_blank" rel="noopener">https://singbox.dingdang.de5.net/</a>：</p>
+          <ul>
+            <li><b>⑧ 节点上报</b>：自动上报选「开启（自动推送）」，服务端地址填 <code class="inline">https://你的域名</code>（带 https://，结尾不要斜杠），上报凭证填 <code class="inline">REPORT_TOKEN</code> 那一串<b>具体值</b> —— 就是第三步你为 <code class="inline">REPORT_TOKEN</code> 生成的那串 UUID，别把变量名 <code class="inline">REPORT_TOKEN</code> 本身填进去。</li>
+          </ul>
+          <p>填完生成器会重新算一遍 SSH 命令，命令里已经把这些值一并带上了。</p>        </div>
+      </article>
+
+    </section>
+
+    <!-- ================= 第六部分 ================= -->
+    <section class="part" id="part-6">
+      <h2><span class="part-no">第六部分</span>在服务器上执行安装命令</h2>
+      <p class="part-sub">这一步最容易翻车：命令是多行的，不能直接往终端对话框里粘。</p>
+
+      <article class="step" id="step-14">
+        <div class="step-no">14</div>
+        <div class="step-body">
+          <div class="step-head"><h3>用「命令编辑器」粘贴并执行</h3></div>
+<p>滚到生成器最下方，复制 <b>生成的 SSH 一键命令</b>；打开面板下方的「命令编辑器」，把命令整段粘进编辑框，再点「发送」到当前会话。</p>
+          <figure class="fig" style="--figw:1424px">
+            <a class="zoom" href="./img/my-ssh-cmd.webp"><img src="./img/my-ssh-cmd.webp" width="1400" height="380" loading="lazy" decoding="async" alt="生成器底部的「生成的 SSH 一键命令」区块"></a>
+            <figcaption>生成的命令是多行带续行符的，整段粘进「命令编辑器」再发送。</figcaption>
+          </figure>
+          <p>命令里已经带上了端口、协议开关、上报域名与 <code class="inline">REPORT_TOKEN</code>，形如：</p>
+          <pre class="cmd"><code>REPORT_FLAG=1 \
+REPORT_BASE='https://sub.example.com' \
+REPORT_TOKEN='b7d4e2f1-8a3c-4f59-b1d0-6c92ae5713ff' \
+hypt='21001' vlrt='21002' tupt='21003' anypt='21004' \
+bash &lt;(curl -fsSL https://raw.githubusercontent.com/jyucoeng/singbox-tools/main/sb.sh) rep</code></pre>
+          <div class="tip">
+            <span class="ico" aria-hidden="true">💡</span>
+            <div><p>装完先让它上报一次（<code class="inline">REPORT_FLAG=1</code> 时脚本装完会自动推一次，订阅里才会有节点），可以用 <code class="inline">sb report status</code> 看上报的结果以及状态（成功时间是 UTC）。</p></div>
+          </div>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- ================= 第七部分 ================= -->
+    <section class="part" id="part-7">
+      <h2><span class="part-no">第七部分</span>客户端导入固定订阅</h2>
+      <p class="part-sub">到这里只剩最后一步：把地址填进客户端。</p>
+
+      <article class="step" id="step-15">
+        <div class="step-no">15</div>
+        <div class="step-body">
+          <div class="step-head"><h3>在客户端里添加<strong>订阅档案</strong>的链接</h3></div>
+<p>要填进客户端的是<b>订阅档案</b>的地址：<code class="inline">https://你的域名/sub/p/&lt;档案名&gt;/&lt;SUB_TOKEN&gt;</code>。档案就是你勾选出来的那批节点，一条档案一条固定链接，顺序和格式都能固定下来：</p>
+          <pre class="cmd"><code>https://sub.example.com/sub/p/hy2/你的SUB_TOKEN</code></pre>
+          <p><b>别和主订阅搞混</b>：主订阅是 <code class="inline">https://你的域名/sub/all/&lt;SUB_TOKEN&gt;</code>，它把<b>全部机器、全部节点</b>塞进一条，不看你勾了什么，只有想一次性拿全量时才用。日常应该用<b>订阅档案</b>——它才是按你勾选的节点分组出来的那一条，机器增减、排序调整都不用改客户端。</p>
+          <p>只想拿单台机器的节点，用 <code class="inline">/sub/&lt;机器名&gt;/&lt;SUB_TOKEN&gt;</code>。</p>
+          <figure class="fig" style="--figw:1148px">
+            <a class="zoom" href="./img/my-sub-presets.webp"><img src="./img/my-sub-presets.webp" width="1148" height="542" loading="lazy" decoding="async" alt="sub-merge 的「订阅档案」区块（示例数据）：三个档案各给出 /sub/p/档案名/SUB_TOKEN 的固定链接"></a>
+            <figcaption>「订阅档案」区块，一个档案一条 <code class="inline">/sub/p/&lt;档案名&gt;/&lt;SUB_TOKEN&gt;</code>（档案名取括号里那个短 id，如 <code class="inline">hy2</code>、<code class="inline">vless</code>）。主订阅 <code class="inline">/sub/all/…</code> 在下方的「订阅链接」区块里，这里看到的才是按勾选分出来的档案。</figcaption>
+          </figure>
+        </div>
+      </article>
+
+    </section>
+
+<!-- ================= FAQ ================= -->
+    <section class="part" id="faq">
+      <h2><span class="part-no">排错</span>常见问题</h2>
+      <p class="part-sub">90% 的问题都出在「名字写错」和「改完没重新部署」上。</p>
+
+      <details class="faq" id="faq-1">
+        <summary>部署完打开域名报 500 / env.DB is undefined，怎么办？</summary>
+        <div class="faq-body">
+          <p>按顺序检查三件事：</p>
+          <ul>
+            <li>D1 绑定的<b>变量名</b>是不是 <code class="inline">DB</code>（一字不差，<code class="inline">DB_NAME</code>、<code class="inline">DATABASE</code> 都不认）；</li>
+            <li><code class="inline">SUB_TOKEN</code> / <code class="inline">ADMIN_PASSWORD</code> / <code class="inline">REPORT_TOKEN</code> 三个变量是否都加了；</li>
+            <li>改完之后有没有<b>再点一次 Deploy</b>——绑定和环境变量只对新的部署生效。</li>
+          </ul>
+          <p>都对了还是不行，进 Worker 的 <b>Logs</b> 看实时报错，通常会直接写 <code class="inline">env.DB is undefined</code> 或 401。</p>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-2">
+        <summary>/ui 打不开，或者一直提示口令错误？</summary>
+        <div class="faq-body">
+          <p>先确认地址：默认入口是 <code class="inline">/ui</code>；如果你在环境变量里配了 <code class="inline">UI_PATH</code>，那么只有那个路径能打开，<code class="inline">/ui</code> 会返回 404 且没有任何内容。</p>
+          <p>再确认口令框里输的是 <code class="inline">ADMIN_PASSWORD</code>，不是 <code class="inline">SUB_TOKEN</code>。同一 IP 10 分钟内错 10 次会锁 24 小时，锁了就在 D1 Console 里执行：</p>
+          <pre class="cmd"><code>DELETE FROM settings WHERE key LIKE 'login-fail:%'</code></pre>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-3">
+          <summary>订阅导入成功，但里面没有节点？</summary>
+          <div class="faq-body">
+            <p>先看导入的是哪一种地址，两种情况原因完全不同：</p>
+            <ul>
+              <li><code class="inline">/sub/all/&lt;SUB_TOKEN&gt;</code>（<b>主订阅</b>，全部节点合并成一条）为空：说明节点根本没进订阅 —— 服务器还没成功上报过。在机器上执行一次 <code class="inline">sb report</code>，再用 <code class="inline">sb report status</code> 确认状态。</li>
+              <li><code class="inline">/sub/p/&lt;档案名&gt;/&lt;SUB_TOKEN&gt;</code>（<b>订阅档案</b>）为空：说明这个档案里一个节点都没勾。回后台打开「订阅档案」→ 编辑 → 把要的节点勾上 → <b>点「保存档案」</b>（不点不生效），再刷新客户端。</li>
+              <li><code class="inline">/sub/&lt;机器名&gt;/&lt;SUB_TOKEN&gt;</code>（单机）为空：多半是机器名写错，名字要和后台「机器排序」里那一列一字不差。</li>
+            </ul>
+            <p>如果连主订阅都空，先查上报为什么失败，最常见的还是 401：核对 ⑧ 里的上报凭证是不是 <code class="inline">REPORT_TOKEN</code>（不是 <code class="inline">SUB_TOKEN</code>）、域名有没有带 <code class="inline">https://</code>、结尾是不是多了斜杠。</p>
+          </div>
+        </details>
+
+      <details class="faq" id="faq-4">
+          <summary>三个口令（SUB_TOKEN / REPORT_TOKEN / ADMIN_PASSWORD）分别是什么，能共用一个吗？</summary>
+          <div class="faq-body">
+            <p>严格说只有两个是 token，另一个是登录口令，三个都可能被单独暴露：</p>
+            <ul>
+              <li><code class="inline">SUB_TOKEN</code>：订阅地址里的那一段 <code class="inline">/sub/p/&lt;档案名&gt;/&lt;SUB_TOKEN&gt;</code>，会发给客户端，<b>最容易被别人看到</b>；</li>
+              <li><code class="inline">REPORT_TOKEN</code>：只给服务器上报用（生成器 ⑧ 里填的那个），泄露了不会连带订阅链接；</li>
+              <li><code class="inline">ADMIN_PASSWORD</code>：WebUI 登录口令，<b>不是 token</b>，只用来进后台。</li>
+            </ul>
+            <p>不建议共用：泄露一处就全线失守，分开的话至少能只换一条。三个都用长随机串（UUID v4 就够）。也别在这三个值里放空格、引号、<code class="inline">/</code>、<code class="inline">?</code>、<code class="inline">#</code>：它们要拼进 URL 路径，会出现「看起来一样却匹配不上」。</p>
+          </div>
+        </details>
+
+      <details class="faq" id="faq-5">
+        <summary>不绑定自定义域名可以吗？</summary>
+        <div class="faq-body">
+          <p>完全可以。Worker 建好自带一个 <code class="inline">https://&lt;worker名&gt;.&lt;子域&gt;.workers.dev</code> 地址，直接把它填进 ⑧ 的服务端地址即可，第四部分整章跳过。</p>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-6">
+        <summary>想改节点名字、调机器顺序怎么办？</summary>
+        <div class="faq-body">
+          <p>打开 <code class="inline">https://你的域名</code> 后面接你的入口路径（默认 <code class="inline">/ui</code>，设过 <code class="inline">UI_PATH</code> 就用它的值）用 <code class="inline">ADMIN_PASSWORD</code> 登录，可以改节点链接与显示名、上移下移机器顺序、增删手动节点。手动改过的机器会进入「手动接管」，继续自动上报也不会覆盖你的改动；点「恢复自动上报」就回到自动内容。</p>
+        </div>
+      </details>
+
+      <details class="faq" id="faq-7">
+          <summary>生成器里两项留空会怎样？</summary>
+          <div class="faq-body">
+            <p>⑧ 里带红色星号 <b style="color:#e5484d">*</b> 的两项（服务端地址、上报凭证）是必填。缺一项或都留空，结果就是<b>不会上报</b>——脚本照样把节点装好、SSH 命令照常生成，只是 sub-merge 那边一个节点都不会多，安装日志里会打印 <code class="inline">⚠️ 已开启自动上报，但还没配置上报地址/上报凭证，本次跳过</code>。事后补上也简单：<code class="inline">sb report</code> 手动推一次即可。</p>
+            <p>⑦ 那栏跟上报无关，它是脚本给<b>本机</b>生成的临时订阅（<code class="inline">https://域名/sub/UUID</code>），留空或关闭都不影响节点安装，也不影响 sub-merge。</p>
+          </div>
+        </details>
+
+      <details class="faq" id="faq-8">
+        <summary>免费额度够用吗？会不会突然收费？</summary>
+        <div class="faq-body">
+          <p>Workers 免费版每天 10 万次请求；D1 免费版 5 GB 存储、每天 500 万行读 / 10 万行写，个人订阅场景远远够用。只要不升级到付费套餐就不会产生费用。</p>
+        </div>
+      </details>
+    </section>
+
+</main>
+</div>
+
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="查看大图">
+  <button class="close" type="button" aria-label="关闭">✕</button>
+  
+  <span class="hint">点击任意位置或按 Esc 关闭</span>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var root = document.documentElement;
+
+  /* ---------- theme ---------- */
+  var btn = document.getElementById('theme-btn');
+  var stored = null;
+  try { stored = localStorage.getItem('sbm-guide-theme'); } catch (e) {}
+  if (stored === 'dark' || stored === 'light') root.setAttribute('data-theme', stored);
+  function isDark() {
+    var t = root.getAttribute('data-theme');
+    if (t) return t === 'dark';
+    return !window.matchMedia('(prefers-color-scheme: light)').matches;
+  }
+  function syncBtn() { btn.textContent = isDark() ? '☀️' : '🌙'; }
+  syncBtn();
+  btn.addEventListener('click', function () {
+    var next = isDark() ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('sbm-guide-theme', next); } catch (e) {}
+    syncBtn();
+  });
+
+  /* ---------- scroll progress ---------- */
+  var bar = document.getElementById('progress-bar');
+  function onScroll() {
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    var p = h > 0 ? (window.scrollY / h) * 100 : 0;
+    bar.style.width = Math.min(100, Math.max(0, p)) + '%';
+  }
+  onScroll();
+  window.addEventListener('scroll', onScroll, { passive: true });
+  window.addEventListener('resize', onScroll);
+
+  /* ---------- toc scroll spy ---------- */
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc-list a'));
+  var targets = links.map(function (a) { return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
+  var spyRaf = 0;
+  function spy() {
+    spyRaf = 0;
+    if (!targets.length) return;
+    var probe = window.scrollY + 120;
+    var current = targets[0].id;
+    for (var i = 0; i < targets.length; i++) {
+      if (targets[i].getBoundingClientRect().top + window.scrollY <= probe) current = targets[i].id;
+    }
+    if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) {
+      current = targets[targets.length - 1].id;
+    }
+    links.forEach(function (a) {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  }
+  function queueSpy() { if (!spyRaf) spyRaf = requestAnimationFrame(spy); }
+  spy();
+  window.addEventListener('scroll', queueSpy, { passive: true });
+  window.addEventListener('resize', queueSpy);
+  window.addEventListener('hashchange', queueSpy);
+
+  /* ---------- copy buttons ---------- */
+  document.querySelectorAll('.code-wrap > pre').forEach(function (pre) {
+    var wrap = pre.parentNode;
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'copy-btn';
+    b.textContent = '复制';
+    b.addEventListener('click', function () {
+      var text = pre.innerText;
+      var done = function () {
+        b.textContent = '已复制';
+        b.classList.add('done');
+        setTimeout(function () { b.textContent = '复制'; b.classList.remove('done'); }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () { fallback(text, done); });
+      } else {
+        fallback(text, done);
+      }
+    });
+    wrap.appendChild(b);
+  });
+  function fallback(text, done) {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) {}
+    document.body.removeChild(ta);
+  }
+
+  /* ---------- lightbox ---------- */
+  var lb = document.getElementById('lightbox');
+  var lbImg = lb.querySelector('img');
+  function open(src, alt) {
+    lbImg.src = src;
+    lbImg.alt = alt || '';
+    lb.classList.add('on');
+    document.body.style.overflow = 'hidden';
+  }
+  function close() {
+    lb.classList.remove('on');
+    lbImg.removeAttribute('src');
+    document.body.style.overflow = '';
+  }
+  document.querySelectorAll('.fig .zoom').forEach(function (a) {
+    a.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      var img = a.querySelector('img');
+      open(a.getAttribute('href'), img ? img.alt : '');
+    });
+  });
+  lb.addEventListener('click', function (ev) {
+    if (ev.target === lbImg) return;
+    close();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape' && lb.classList.contains('on')) close();
+  });
+})();
+</script>
+
+
+</body></html>
